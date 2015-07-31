@@ -1,0 +1,24 @@
+1 VERSIONINFO
+FILEVERSION 1, 0, 0, 6
+FILEOS VOS__WINDOWS32
+FILETYPE VFT_DLL
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0"
+        BEGIN
+                VALUE "CompanyName", "HangZhou Yuting Inc.\000"
+                VALUE "FileDescription", "dzhRead\000"
+                VALUE "FileVersion", "1.0.0.6\000"
+                VALUE "InternalName", "dzhRead.exe\000"
+                VALUE "LegalCopyright", "HangZhou Yuting Inc. All rights reserved.\000"
+                VALUE "OriginalFilename", "dzhRead.exe\000"
+                VALUE "ProductName", "Trading System\000"
+                VALUE "ProductVersion", "1.0.0.1\000"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", $0804, $04B0
+    END
+END  

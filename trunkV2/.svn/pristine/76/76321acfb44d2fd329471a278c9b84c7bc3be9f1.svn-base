@@ -1,0 +1,2 @@
+[dbpath]
+path=Provider=SQLOLEDB.1;Password=666666;Persist Security Info=True;User ID=zhaogd;Initial Catalog=ytfx;Data Source=10.19.19.250

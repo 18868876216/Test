@@ -1,0 +1,357 @@
+unit uFutuDayTrans;
+
+interface
+
+uses
+  SysUtils, Classes, uFactory, IniFiles, uTools, DateUtils, uHtmlFileTrans;
+
+type
+  TDate = Integer;                            // 日期
+  TTime = Integer;                            // 时间
+  TPeriod = type Byte;                        // 周期
+  TPeriodSet = set of TPeriod;
+  TVolumn = type Cardinal;                    // 数量
+  TValue = type Currency;                     // 金额
+  TValueArray = array of TValue;
+  TPrice = type Currency;
+
+{$REGION ' 交易时间 '}
+type
+  PDateTime = ^TDateTime;
+  TDateTime = packed record                    // 交易时间
+    Date: TDate;
+    Time: TTime;
+    Notify: Boolean;
+  end;
+const
+  SizeOfDateTime = SizeOf(TDateTime);
+{$ENDREGION}
+
+{$REGION ' Tick Data Rec '}
+type
+  TDateTimeEx = packed record
+    Date: TDate;
+    Time: TTime;
+    Millisec: TTime;
+  end;
+  TDataTickRecData = packed record
+    New: TPrice;
+    VOL: TVolumn;
+    Hold: TVolumn;
+    Sell: TPrice;
+    SellAmount: TVolumn;
+    Buy: TPrice;
+    BuyAmount: TVolumn;
+  end;
+  PDataTickRec = ^TDataTickRec;
+  TDataTickRec = packed record
+    Time: TDateTimeEx;
+    Data: TDataTickRecData;
+  end;
+const
+  SizeOfDataTickRec = SizeOf(TDataTickRec);
+{$ENDREGION}
+
+type
+  TFutuDayTrans = class(TDataTrans)
+  private
+    FDate: String;
+    FOpen, FHigh, FLow, FClose ,FVOL: TPrice;
+    function GetFutuDayPath(Param: String): String;
+    function GetStr(StrSource, StrBegin, StrEnd: string): string;
+  protected
+    class function SupportedFileKind (): TFileKindSet; override;
+    procedure Trans (const ASrcFile, ADestFile: TFileName; const Param: String); override;
+    procedure TransData (const ASrc, ADest: TStream); override;
+    procedure TransData (const ADest: TStream; AList: TStrings); overload;
+    function QuickSortCompare (const Item1, Item2: Pointer): Integer;
+    procedure ProcessData (Ptr: Pointer; Action: TListNotification);
+    procedure OnMergeData (const AOld, ANew: Pointer);
+  end;
+
+implementation
+
+uses
+  Math, StrUtils,
+  uContainerEx;
+
+{$REGION'  fkFutuDay '}
+
+procedure TFutuDayTrans.OnMergeData(const AOld, ANew: Pointer);
+begin
+  if assigned(AOld) and assigned(ANew) then
+  begin
+    FVOL := PDataTickRec(ANew).Data.VOL;
+    FOpen := PDataTickRec(AOld).Data.New;
+    FClose := PDataTickRec(ANew).Data.New;
+    FHigh := Max( FHigh, PDataTickRec(ANew).Data.New);
+    FLow := Min( FLow, PDataTickRec(ANew).Data.New);
+    FreeMem(ANew);
+  end;
+end;
+
+procedure TFutuDayTrans.ProcessData(Ptr: Pointer; Action: TListNotification);
+begin
+  if (action = lnDeleted) and assigned(Ptr) then
+    FreeMem(Ptr);
+end;
+
+function TFutuDayTrans.QuickSortCompare(const Item1, Item2: Pointer): Integer;
+begin
+  Result := SORT_DEF_NUM;
+  if assigned(Item1) and assigned(Item2) then
+    Result := PDataTickRec(Item1).Time.Date - PDataTickRec(Item2).Time.Date;
+end;
+
+class function TFutuDayTrans.SupportedFileKind: TFileKindSet;
+begin
+  result := [fkFutuDay];
+end;
+
+function TFutuDayTrans.GetFutuDayPath(Param: String): String;
+var
+  FFile: TIniFile;
+begin
+  FFile := TIniFile.Create(GetCurrPath + '\Param\futupathinf.ini');
+  try
+    Result := FFile.Readstring('futudaypath',Param,'');
+    Result := IncludeTrailingPathDelimiter(Result);
+  finally
+    FFile.Free;
+  end;
+end;
+
+procedure TFutuDayTrans.Trans(const ASrcFile, ADestFile: TFileName;  const Param: String);
+begin
+  FDate := Param;
+  if DateEnd = MaxInt then
+  begin
+    if FDate = '' then
+      FDate := formatDateTime('YYYYMMDD', Date);
+
+    SetFilter(FDate, FDate);
+  end;
+  inherited;
+end;
+
+procedure TFutuDayTrans.TransData(const ASrc, ADest: TStream);
+var
+  FPath, EXT: String;
+  AllfileList: TStringlist;
+begin
+  AllfileList := TStringlist.Create;
+  FPath := GetFutuDayPath('path');
+  EXT := GetFutuDayPath('ext');
+  EXT := ExcludeTrailingPathDelimiter(EXT);
+  if DateBegin = DateEnd then
+    FPath := FPath + inttostr(DateBegin);
+  FindFile(AllfileList,FPath,EXT,True);
+  TransData(ADest,AllfileList);
+  AllfileList.free;
+end;
+
+procedure TFutuDayTrans.TransData(const ADest: TStream; AList: TStrings);
+var
+  List: TStringlist;
+  I: Integer;
+  rq,dm,kp,zg,zd,sp,cjl: String;
+  FFile: String;
+  FParser: TContnrListEx;
+begin
+  List := TStringList.Create;
+  FParser := TContnrListEx.Create;
+  FParser.Sorted := True;
+  FParser.Duplicates := dupeMerge;
+  FParser.OnMergeData := OnMergeData;
+  FParser.OnProcessData := ProcessData;
+  FParser.CompareFunc := QuickSortCompare;
+  for I := 0 to AList.Count - 1 do
+  begin
+    FFile := AList[I];
+    rq := GetStr(FFile, 'Quotas\', '\I');
+    if (strtoint(rq) >= DateBegin) and (strtoint(rq) <= DateEnd) then
+    begin
+      FHigh := 0;
+      FLow := maxInt;
+      FFile := AList[I];
+      FParser.Clear;
+      FParser.FileLoad(FFile,SizeOfDataTickRec);
+      dm := GetStr(FFile,rq+'\','.dat');
+      dm := stringreplace(dm,'\Tick','',[rfreplaceall]);
+      kp := currtostr(FOpen);
+      zg := currtostr(FHigh);
+      zd := currtostr(FLow);
+      sp := currtostr(FClose);
+      cjl := currtostr(FVOL);
+      List.CommaText := rq+','+'SF'+','+'SF'+dm+','+kp+','+zg+','+zd+','+sp+','+cjl+',0,0,0';
+      write(ADest,List);
+    end;
+  end;
+  FParser.Free;
+  List.free;
+end;
+
+function TFutuDayTrans.GetStr(StrSource: string; StrBegin: string; StrEnd: string):string;
+var
+  star,over:integer;
+begin
+  star := AnsiPos(StrBegin,StrSource)+ length(StrBegin);
+  over := PosEx(StrEnd,StrSource, star);
+  result := Copy(StrSource,star,over-star);
+end;
+
+{$ENDREGION$}
+
+{$REGION'  fkFutuJsj '}
+
+type
+  TFutuJsj = class(TFutuDayTrans)
+  private
+    FDate: String;
+    FTime: TTime;
+    FPrice, FVOL, OldVol: TPrice;
+    TempList: TStringList;
+  protected
+    class function SupportedFileKind (): TFileKindSet; override;
+    procedure Trans (const ASrcFile, ADestFile: TFileName; const Param: String); override;
+    procedure TransData (const ASrc, ADest: TStream); override;
+    procedure TransData (const ADest: TStream; AList: TStrings); overload;
+    function QuickSortCompare (const Item1, Item2: Pointer): Integer;
+    procedure ProcessData (Ptr: Pointer; Action: TListNotification);
+    procedure OnMergeData (const AOld, ANew: Pointer);
+  end;
+
+procedure TFutuJsj.OnMergeData(const AOld, ANew: Pointer);
+begin
+  if assigned(AOld) and assigned(ANew) then
+  begin
+    FTime := PDataTickRec(ANew).Time.Time;
+    FPrice := PDataTickRec(ANew).Data.New;
+    FVOL := PDataTickRec(ANew).Data.VOL - OldVol;
+    OldVol := PDataTickRec(ANew).Data.VOL;
+    TempList.Add(inttostr(FTime)+','+currtostr(FPrice)+','+currtostr(FVOL));
+    FreeMem(ANew);
+  end;
+end;
+
+procedure TFutuJsj.ProcessData(Ptr: Pointer; Action: TListNotification);
+begin
+  if (action = lnDeleted) and assigned(Ptr) then
+    FreeMem(Ptr);
+end;
+
+function TFutuJsj.QuickSortCompare(const Item1, Item2: Pointer): Integer;
+begin
+  Result := SORT_DEF_NUM;
+  if assigned(Item1) and assigned(Item2) then
+    Result := PDataTickRec(Item1).Time.Date - PDataTickRec(Item2).Time.Date;
+end;
+
+class function TFutuJsj.SupportedFileKind: TFileKindSet;
+begin
+  result := [fkFutuJsj];
+end;
+
+procedure TFutuJsj.Trans(const ASrcFile, ADestFile: TFileName;  const Param: String);
+begin
+  FDate := Param;
+  if DateEnd = MaxInt then
+  begin
+    if FDate = '' then
+      FDate := formatDateTime('YYYYMMDD', Date);
+
+    SetFilter(FDate, FDate);
+  end;
+  inherited;
+end;
+
+procedure TFutuJsj.TransData(const ASrc, ADest: TStream);
+var
+  FPath, EXT: String;
+  AllfileList: TStringlist;
+begin
+  AllfileList := TStringlist.Create;
+  FPath := GetFutuDayPath('path');
+  EXT := GetFutuDayPath('ext');
+  EXT := ExcludeTrailingPathDelimiter(EXT);
+  if DateBegin = DateEnd then
+    FPath := FPath + inttostr(DateBegin);
+  FindFile(AllfileList,FPath,EXT,True);
+  TransData(ADest,AllfileList);
+  AllfileList.free;
+end;
+
+procedure TFutuJsj.TransData(const ADest: TStream; AList: TStrings);
+var
+  List, List1: TStringlist;
+  I, K: Integer;
+  A, B: Double;
+  rq, dm, jsj: String;
+  FFile: String;
+  FParser: TContnrListEx;
+begin
+  List := TStringList.Create;
+  List1 := TStringList.Create;
+  FParser := TContnrListEx.Create;
+  FParser.Sorted := True;
+  FParser.Duplicates := dupeMerge;
+  FParser.OnProcessData := ProcessData;
+  FParser.OnMergeData := OnMergeData;
+  FParser.CompareFunc := QuickSortCompare;
+  for I := 0 to AList.Count - 1 do
+  begin
+    TempList := TStringList.Create;
+    FFile := AList[I];
+    rq := GetStr(FFile, 'Quotas\', '\I');
+    if (strtoint(rq) >= DateBegin) and (strtoint(rq) <= DateEnd) then
+    begin
+      A := 0;
+      B := 0;
+      FParser.Clear;
+      FParser.FileLoad(FFile,SizeOfDataTickRec);
+      dm := GetStr(FFile,rq+'\','.dat');
+      dm := stringreplace(dm,'\Tick','',[rfreplaceall]);
+      if FTime > 151000 then
+      begin
+        for K := 0 to TempList.Count - 1 do
+        begin
+          List1.CommaText := TempList[K];
+          if strtoint(List1[0]) >= 141500 then
+          begin
+            A := A + strtofloat(List1[1]) * strtofloat(List1[2]);
+            B := B + strtofloat(List1[2]);
+          end;
+        end;
+      end
+      else
+        begin
+          for K := 0 to TempList.Count - 1 do
+          begin
+            List1.CommaText := TempList[K];
+            if strtoint(List1[0]) >= 140000  then
+            begin
+              A := A + strtofloat(List1[1]) * strtofloat(List1[2]);
+              B := B + strtofloat(List1[2]);
+            end;
+          end;
+        end;
+      jsj := floattostr(A/B);
+      List.CommaText := rq+','+'SF'+','+'SF'+dm+','+jsj;
+      write(ADest,List);
+    end;
+    TempList.Free;
+  end;
+  FParser.Free;
+  List.free;
+  List1.free;
+
+end;
+
+{$ENDREGION}
+
+initialization
+
+  TFutuDayTrans.Register;
+  TFutuJsj.Register;
+
+end.

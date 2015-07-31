@@ -1,0 +1,14 @@
+del /S *.~*
+del /S *.~*~
+del /S *.#*
+del /S *.dcu
+del /S *.dsk
+del /S *.hpp
+del /S *.ddp
+del /S *.mps
+del /S *.mpt
+del /S *.bak
+del /S *.local
+del /S *.identcache
+del /S *.drc
+del /S *.tvsconfig

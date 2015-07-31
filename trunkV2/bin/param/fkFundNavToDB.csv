@@ -1,0 +1,9 @@
+序号,长度,类型,字段名,字段说明
+1,10,ftString,rq,日期
+2,10,ftString,dm,代码
+3,4,ftSingle,jz_DBF,DBF库
+4,4,ftSingle,jz_Web,官网净值
+5,4,ftSingle,jz_123,fund123
+6,4,ftSingle,jz_jrj,金融界
+7,4,ftSingle,jz_hexun,和讯
+8,4,ftSingle,jz_stockstar,证券之星

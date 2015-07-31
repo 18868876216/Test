@@ -1,0 +1,11 @@
+序号,长度,类型,字段名,字段说明
+1,10,ftString,rq,日期
+2,4,ftString,sc,市场
+3,10,ftString,dm,代码
+4,20,ftString,mc,名称
+5,4,ftString,tpzt,停牌状态
+6,10,ftString,ksrq,开始日期
+7,10,ftString,jsrq,结束日期
+8,4,ftString,tpsj,停牌时间
+9,255,ftString,tpyy,停牌原因
+,,,,

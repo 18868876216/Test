@@ -1,0 +1,12 @@
+序号,长度,类型,字段名,字段说明
+1,4,ftDate,rq,日期
+2,0,ftString,sc,市场
+3,0,ftString,dm,代码
+4,4,ftSingle,kp,开盘价
+5,4,ftSingle,zg,最高价
+6,4,ftSingle,zd,最低价
+7,4,ftSingle,sp,收盘
+8,4,ftSingle,cjl,成交量
+9,4,ftSingle,cje,成交金额
+10,2,ftSmallInt,sl,上涨
+11,2,ftSmallInt,xd,下跌

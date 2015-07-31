@@ -1,0 +1,4 @@
+序号,长度,类型,字段名,字段说明
+1,0,ftString,sc,市场
+2,0,ftString,dm,代码
+3,0,ftString,mc,名称

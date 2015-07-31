@@ -1,0 +1,11 @@
+序号,长度,类型,字段名,字段说明
+1,10,ftString,rq,日期
+3,10,ftString,etf,代码
+2,4,ftString,etfsc,市场
+2,4,ftString,sc,市场
+3,10,ftString,dm,代码
+4,20,ftString,mc,名称
+5,10,ftString,amount,数量
+6,10,ftString,replaceflag,替代标志
+7,10,ftString,ratio,溢价比率
+8,10,ftString,balance,替代金额

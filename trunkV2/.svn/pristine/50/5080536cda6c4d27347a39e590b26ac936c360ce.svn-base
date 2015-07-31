@@ -1,0 +1,522 @@
+unit uDzhBinFileTrans;
+
+interface
+
+uses
+  SysUtils, Windows, Classes, Controls, Math;
+
+implementation
+
+uses
+  uFactory, uTools;
+
+type
+  /// 数据解析基类
+  TDzhBinTrans = class(TDataTrans)
+  protected
+    procedure TransData(const ASrc, ADest: TStream); override;
+    function Read(const ASrc: TStream; const Count: integer): string; overload;
+    function Read(const ASrc: TStream; const Data: TStrings): Boolean; overload; virtual;
+  end;
+  /// K线数据解析基类
+  TDzhBinKLineTrans = class(TDzhBinTrans)
+  protected
+    function StartPos: Int64; virtual;
+    function HeaderSize: Int64; virtual;
+    function BlockSize: Int64; virtual;
+    function RcdSize: Int64; virtual;
+
+    function GetStockCount(const ASrc: TStream): Cardinal;
+    function GetStockKLineCount(const ASrc: TStream; const AIndex: Cardinal; out AName: string): Cardinal;
+    function GetBlockPos(const ASrc: TStream; const AHeader, AIndex: Cardinal): Int64;
+  protected
+    function GetFilterField: string; override;
+    procedure TransData(const ASrc, ADest: TStream); override;
+  end;
+
+  TDzhBinStockDay = class(TDzhBinKLineTrans)
+  protected
+    class function SupportedFileKind(): TFileKindSet; override;
+  end;
+
+  TDzhBinStockMin = class(TDzhBinKLineTrans)
+  protected
+    class function SupportedFileKind(): TFileKindSet; override;
+    function BlockSize: Int64; override;
+  end;
+
+  TDzhBinStockTick = class(TDzhBinKLineTrans)
+  private
+    procedure FixData(const Data: TStrings);
+  protected
+    class function SupportedFileKind(): TFileKindSet; override;
+
+    function BlockSize: Int64; override;
+    function RcdSize: Int64; override;
+
+    function Read(const ASrc: TStream; const Data: TStrings): Boolean; override;
+  end;
+
+  /// 块数据解析基类
+  TDzhBinBlockTrans = class(TDzhBinTrans)
+  protected
+    function StartPos: Int64; virtual; abstract;
+    function BlockSize: Int64; virtual; abstract;
+    procedure TransData(const ASrc, ADest: TStream); override;
+  end;
+
+  TDzhBinBlockTransCodeInfo = class(TDzhBinBlockTrans)
+  protected
+    function StartPos: Int64; override;
+    function BlockSize: Int64; override;
+    class function SupportedFileKind(): TFileKindSet; override;
+  end;
+
+  TDzhBinBlockTransFinReport = class(TDzhBinBlockTrans)
+  protected
+    function StartPos: Int64; override;
+    function BlockSize: Int64; override;
+    class function SupportedFileKind(): TFileKindSet; override;
+  end;
+
+  /// split数据解析
+  TDzhBinTransSplit = class(TDzhBinTrans)
+  protected
+    class function SupportedFileKind(): TFileKindSet; override;
+    procedure TransData(const ASrc, ADest: TStream); override;
+  end;
+
+  { TDzhBinTrans }
+
+function TDzhBinTrans.Read(const ASrc: TStream; const Data: TStrings): Boolean;
+
+  function dzhDate(idzh: Integer): Integer;
+  var
+    dt: TDate;
+    sdt: string;
+  begin
+    dt := StrToDateEx('1970-01-01');
+    dt := dt + idzh div SecsPerDay;
+    sdt := FormatDateTime('YYYYMMDD', dt);
+    result := strtoint(sdt);
+  end;
+
+  function dzhTime(idzh: Integer): integer;
+  var
+    FRtn, FRemind: Word;
+  begin
+    DivMod(idzh mod SecsPerDay, SecsPerMin * MinsPerHour, FRtn, FRemind);
+    Result := FRtn * 10000;
+    DivMod(FRemind, SecsPerMin, FRtn, FRemind);
+    Result := Result + FRtn * 100 + FRemind;
+  end;
+
+  function AutoNum(): Integer;
+  {$J+}
+  const
+    I_AUTO: Integer = 0;
+  {$J-}
+  begin
+    Result := (I_AUTO);
+    Inc(I_AUTO);
+  end;
+var
+  FPtr: Pointer;
+  pfi: PFieldInfo;
+  pi: Integer;
+  ps: Single;
+begin
+  Result := True;
+  if Assigned(ASrc) and Assigned(Data) then
+  begin
+    Data.Clear;
+    for FPtr in Param do
+    begin
+      pfi := PFieldInfo(FPtr);
+      case pfi^.Length of
+        NegativeValue: ;
+        ZeroValue: Data.Add('');
+      else
+        case pfi^.FT of
+          ftSeek:
+            begin
+              Data.Add('');
+              ASrc.Seek(pfi^.length, soFromCurrent);
+            end;
+          ftString:
+            begin
+              Data.Add(Read(ASrc, pfi^.Length));
+            end;
+          ftDate:
+            begin
+              ZeroMemory(@pi, SizeOf(pi));
+              ASrc.Read(pi, pfi^.length);
+              pi := dzhdate(pi);
+              Data.add(IntToStr(pi))
+            end;
+          ftDateTime:
+            begin
+              ZeroMemory(@pi, SizeOf(pi));
+              ASrc.Read(pi, pfi^.length);
+              Data.add(IntToStr(dzhDate(pi)));
+              Data.add(IntToStr(dzhTime(pi)));
+            end;
+          ftSingle:
+            begin
+              ZeroMemory(@ps, SizeOf(ps));
+              ASrc.Read(ps, pfi^.length);
+              if not IsNan(ps) then
+                Data.Add(Format('%.*f', [pfi.digit, ps]))
+              else
+                Data.Add('');
+            end;
+          ftSingleD10:
+            begin
+              ZeroMemory(@ps, SizeOf(ps));
+              ASrc.Read(ps, pfi^.length);
+              if ps <> 0 then
+                ps := ps / 10;
+              if not IsNan(ps) then
+                Data.Add(Format('%.*f', [pfi.digit, ps]))
+              else
+                Data.Add('');
+            end;
+          ftIntAuto:
+            begin
+              Data.Add(IntToStr(AutoNum));
+            end;
+          ftByte, ftShortInt, ftSmallInt, ftInteger:
+            begin
+              ZeroMemory(@pi, SizeOf(pi));
+              ASrc.Read(pi, pfi^.length);
+              Data.Add(IntToStr(pi));
+            end;
+        else
+          Result := False;
+        end;
+      end;
+    end;
+  end;
+end;
+
+function TDzhBinTrans.Read(const ASrc: TStream; const Count: integer): string;
+var
+  PC: PChar;
+  iLoop: integer;
+begin
+  result := '';
+  new(PC);
+  for iLoop := 0 to Count - 1 do
+  begin
+    ASrc.Read(PC^, 1);
+    //kettle里处理char(0)麻烦，这里过滤
+    if PC[0] <> char(0) then
+      result := result + PC[0];
+  end;
+end;
+
+procedure TDzhBinTrans.TransData(const ASrc, ADest: TStream);
+begin
+  inherited;
+end;
+
+{ TDzhBinKLineTrans }
+
+function TDzhBinKLineTrans.BlockSize: Int64;
+begin
+  Result := $100;
+end;
+
+function TDzhBinKLineTrans.GetBlockPos(const ASrc: TStream;  const AHeader, AIndex: Cardinal): Int64;
+begin
+  Result := 0;
+  if Assigned(ASrc) then
+  begin
+    ASrc.Position := $26 + AHeader * HeaderSize + AIndex * 2;
+    ASrc.Read(Result, 2);
+  end;
+end;
+
+function TDzhBinKLineTrans.GetFilterField: string;
+begin
+  Result := 'rq';
+end;
+
+function TDzhBinKLineTrans.GetStockCount(const ASrc: TStream): Cardinal;
+begin
+  Result := 0;
+  if Assigned(ASrc) then
+  begin
+    //总股票数量
+    ASrc.Position := $0C;
+    ASrc.Read(Result, 4);
+  end;
+end;
+
+function TDzhBinKLineTrans.GetStockKLineCount(const ASrc: TStream;  const AIndex: Cardinal; out AName: string): Cardinal;
+begin
+  Result := 0;
+  if Assigned(ASrc) then
+  begin
+    ASrc.Position := $18 + AIndex * HeaderSize;
+    AName := Trim(Read(ASrc, 10));
+    ASrc.Read(Result, 2);
+  end;
+end;
+
+function TDzhBinKLineTrans.HeaderSize: Int64;
+begin
+  Result := $40;
+end;
+
+function TDzhBinKLineTrans.RcdSize: Int64;
+begin
+  Result := $20;
+end;
+
+function TDzhBinKLineTrans.StartPos: Int64;
+begin
+  Result := $41000;
+end;
+
+procedure TDzhBinKLineTrans.TransData(const ASrc, ADest: TStream);
+var
+  FStkIdx, FKLineCount, FLoop, FBlockPos, I: Integer;
+  FName: string;
+  FData: TStrings;
+begin
+  inherited;
+  if Assigned(ASrc) and Assigned(ADest) then
+  begin
+    FData := TStringList.Create;
+    try
+      for FStkIdx := 0 to GetStockCount(ASrc) - 1 do
+      begin
+        FKLineCount := GetStockKLineCount(ASrc, FStkIdx, FName);
+        for FLoop := 0 to 50 do
+        begin
+          FBlockPos := GetBlockPos(ASrc, FStkIdx, FLoop);
+          if FBlockPos >= 0 then
+            for I := 0 to BlockSize - 1 do
+            begin
+              if (FLoop * BlockSize + I + 1 > FKLineCount) then
+                Break;
+
+              ASrc.Position := StartPos + FBlockPos * BlockSize * RcdSize + RcdSize * I;
+
+              if Read(ASrc, FData) and Filter(FData) then
+              begin
+                FData[0] := FName;
+                Write(ADest, FData);
+              end;
+              //FData.Clear;
+            end;
+        end;
+      end;
+    finally
+      FData.Free;
+    end;
+  end;
+end;
+
+{ TDzhBinStockDay }
+
+class function TDzhBinStockDay.SupportedFileKind: TFileKindSet;
+begin
+  //Result := [fkDay, fkFutuDay, fkMin5, fkFutuMin5];
+  Result := [fkDay, fkMin5, fkFutuMin5];
+end;
+
+{ TDzhBinStockMin }
+
+function TDzhBinStockMin.BlockSize: Int64;
+begin
+  Result := $200;
+end;
+
+class function TDzhBinStockMin.SupportedFileKind: TFileKindSet;
+begin
+  Result := [fkMin, fkFutuMin];
+end;
+
+{ TDzhBinStockTick }
+
+function TDzhBinStockTick.BlockSize: Int64;
+begin
+  Result := $EC;
+end;
+
+procedure TDzhBinStockTick.FixData(const Data: TStrings);
+var
+  FBase, FDest: Single;
+  I, iCount, FFlag: Integer;
+begin
+  if Assigned(Data) and (Data.Count > 10) then
+  begin
+    /// 修正买卖价
+    FBase := StrToFloatDef(Data[3], 0); /// 基准价，暂时指定第四列数据
+    FFlag := StrToIntDef(Data[9], 0); /// 买卖盘标志
+    iCount := Data.Count;
+    for I := iCount - 1 downto iCount - 10 do
+    begin
+      FDest := StrToFloatDef(Data[I], 0);
+      case Byte(FFlag) of
+        $80, $C0: FDest := FDest / 100;
+        $A0, $E0: FDest := FDest / 1000;
+      end;
+      FDest := FBase + FDest;
+      Data[I] := Format('%.*f', [3, FDest]);
+    end;
+    /// 修正, 发现数据文件中都为0
+{    FFlag := StrToIntDef(AData[8], 0);       /// 累计成交笔数的溢出标志
+    if FFlag <> 0 then
+    begin
+      iCount := StrToIntDef(AData[6], 0);    /// 累计成交量
+      iCount := FFlag shr 1 + iCount;
+      AData[6] := IntToStr(iCount);
+    end; }
+  end;
+end;
+
+function TDzhBinStockTick.RcdSize: Int64;
+begin
+  Result := $34;
+end;
+
+function TDzhBinStockTick.Read(const ASrc: TStream;  const Data: TStrings): Boolean;
+begin
+  Result := inherited Read(ASrc, Data);
+  if Result then
+    FixData(Data);
+end;
+
+class function TDzhBinStockTick.SupportedFileKind: TFileKindSet;
+begin
+  Result := [fkTick, fkFutuTick];
+end;
+
+{ TDzhBinBlockTrans }
+
+procedure TDzhBinBlockTrans.TransData(const ASrc, ADest: TStream);
+var
+  FSize: Int64;
+  FData: TStrings;
+begin
+  if Assigned(ASrc) and Assigned(ADest) then
+  begin
+    FData := TStringList.Create;
+    try
+      FSize := ASrc.Size;
+      ASrc.Position := StartPos;
+      while ASrc.Position < FSize do
+        if Read(ASrc, FData) and Filter(FData) then
+          Write(ADest, FData);
+    finally
+      FData.Free;
+    end;
+  end;
+end;
+
+{ TDzhBinBlockTransCodeInfo }
+
+function TDzhBinBlockTransCodeInfo.BlockSize: Int64;
+begin
+  Result := $140;
+end;
+
+function TDzhBinBlockTransCodeInfo.StartPos: Int64;
+begin
+  Result := $44A6;
+end;
+
+class function TDzhBinBlockTransCodeInfo.SupportedFileKind: TFileKindSet;
+begin
+  Result := [fkStockInfo];
+end;
+
+{ TDzhBinBlockTransFinReport }
+
+function TDzhBinBlockTransFinReport.BlockSize: Int64;
+begin
+  Result := $D8;
+end;
+
+function TDzhBinBlockTransFinReport.StartPos: Int64;
+begin
+  Result := $8;
+end;
+
+class function TDzhBinBlockTransFinReport.SupportedFileKind: TFileKindSet;
+begin
+  Result := [fkFinReport];
+end;
+
+{ TDzhBinTransSplit }
+
+class function TDzhBinTransSplit.SupportedFileKind: TFileKindSet;
+begin
+  Result := [fkSplit]
+end;
+
+procedure TDzhBinTransSplit.TransData(const ASrc, ADest: TStream);
+var
+  I: Integer;
+  FData: TStrings;
+  sStock: string;
+begin
+  inherited;
+  if Assigned(ASrc) and Assigned(ADest) then
+  begin
+    FData := TStringList.Create;
+    try
+      ASrc.Position := 8;
+      while ASrc.Position < ASrc.Size - 4 do
+      begin
+        ASrc.Read(I, 4);
+        ASrc.Position := ASrc.Position - 4;
+        while (I = -1) do
+        begin
+          ASrc.Position := ASrc.Position + 4;
+          sStock := Trim(Read(ASrc, 16));
+
+          //判断是否结束
+          ASrc.Read(I, 4);
+          ASrc.Position := ASrc.Position - 4;
+
+          while (I <> -1) do
+          begin
+            if Read(ASrc, FData) and Filter(FData) then
+            begin
+              FData[0] := sStock;
+              Write(ADest, FData);
+            end;
+
+            if ASrc.Position > ASrc.Size - 4 then
+              Break;
+            ASrc.Read(I, 4);
+            ASrc.Position := ASrc.Position - 4;
+          end;
+
+          if ASrc.Position > ASrc.Size - 4 then
+            Break;
+        end;
+      end;
+    finally
+      FData.Free;
+    end;
+  end;
+
+end;
+
+initialization
+  TDzhBinStockDay.Register;
+  TDzhBinStockMin.Register;
+//  TDzhBinStockTick.Register;
+
+//  TDzhBinBlockTransCodeInfo.Register;
+  TDzhBinBlockTransFinReport.Register;
+
+  TDzhBinTransSplit.Register;
+
+end.
+

@@ -1,0 +1,5 @@
+序号,长度,类型,字段名,字段说明
+1,64,ftString,blkdm,组合代码
+2,4,ftString,sc,市场
+3,10,ftString,dm,成分股代码
+4,20,ftSingle,qz,权重

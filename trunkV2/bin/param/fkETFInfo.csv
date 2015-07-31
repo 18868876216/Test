@@ -1,0 +1,14 @@
+序号,长度,类型,字段名,字段说明
+1,10,ftInteger,rq,日期
+2,4,ftString,Exch,市场
+3,10,ftString,Code,代码
+4,10,ftSingle,ReportUnit,交易单位
+5,10,ftSingle,CashBalance,现金余额
+6,10,ftSingle,MaxCashRatio,最大现金替代比率
+7,10,ftInteger,RecordNum,成份股数量
+8,10,ftInteger,TradingDay,T日日期
+9,10,ftInteger,PrecTradingDay,T-1日日期
+10,10,ftSingle,NAV,NAV
+11,10,ftSingle,CashComponent,CashComponent
+12,10,ftSingle,NavPercu,NAVperCU
+13,10,ftInteger,IOPV,IOPV

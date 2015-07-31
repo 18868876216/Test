@@ -1,0 +1,5 @@
+序号,长度,类型,字段名,字段说明
+1,4,ftDate,rq,日期
+2,0,ftString,sc,市场
+3,0,ftString,dm,代码
+4,5,ftSingle,jsj,结算价

@@ -1,0 +1,10 @@
+序号,长度,类型,字段名,字段说明
+1,10,ftString,rq,日期
+2,4,ftString,sc,市场
+3,10,ftString,dm,代码
+4,4,ftSingle,kp,开盘
+5,4,ftSingle,zg,最高
+6,4,ftSingle,zd,最低
+7,4,ftSingle,sp,收盘
+8,4,ftSingle,cjl,成交量
+9,4,ftSingle,cje,成交额

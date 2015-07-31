@@ -1,0 +1,7 @@
+序号,长度,类型,字段名,字段说明
+1,0,ftString,dm,代码
+2,4,ftDate,rq,日期
+3,4,ftSingle,sg,送股
+4,4,ftSingle,pg,配股
+5,4,ftSingle,pgj,配股价
+6,4,ftSingle,fh,分红

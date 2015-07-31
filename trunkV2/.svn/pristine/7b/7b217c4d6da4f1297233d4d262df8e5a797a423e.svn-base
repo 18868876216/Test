@@ -1,0 +1,34 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{0d313f55-394c-466e-bc09-1c28806a6124}</ProjectGuid>
+  </PropertyGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <Projects Include="dzhread\dzhRead.dproj" />
+  </ItemGroup>
+  <ProjectExtensions>
+    <Borland.Personality>Default.Personality</Borland.Personality>
+    <Borland.ProjectType />
+    <BorlandProject>
+<BorlandProject xmlns=""><Default.Personality></Default.Personality></BorlandProject></BorlandProject>
+  </ProjectExtensions>
+  <Target Name="dzhRead">
+    <MSBuild Projects="dzhread\dzhRead.dproj" Targets="" />
+  </Target>
+  <Target Name="dzhRead:Clean">
+    <MSBuild Projects="dzhread\dzhRead.dproj" Targets="Clean" />
+  </Target>
+  <Target Name="dzhRead:Make">
+    <MSBuild Projects="dzhread\dzhRead.dproj" Targets="Make" />
+  </Target>
+  <Target Name="Build">
+    <CallTarget Targets="dzhRead" />
+  </Target>
+  <Target Name="Clean">
+    <CallTarget Targets="dzhRead:Clean" />
+  </Target>
+  <Target Name="Make">
+    <CallTarget Targets="dzhRead:Make" />
+  </Target>
+  <Import Condition="Exists('$(MSBuildBinPath)\Borland.Group.Targets')" Project="$(MSBuildBinPath)\Borland.Group.Targets" />
+</Project>

@@ -1,0 +1,4 @@
+序号,长度,类型,字段名,字段说明
+1,64,ftString,blkdm,板块代码
+2,128,ftString,blkmc,板块代码
+3,20,ftString,blkfl,板块分类
